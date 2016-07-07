@@ -32,7 +32,7 @@
 
     @see Button, ImageButton, TextButton, ArrowButton
 */
-class JUCE_API  ShapeButton  : public Button
+class   ShapeButton  : public Button
 {
 public:
     //==============================================================================

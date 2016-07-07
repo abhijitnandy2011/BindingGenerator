@@ -1,13 +1,13 @@
 #pragma once
 #include <boost/python.hpp>
-#include "${include_file}"
+#include "../JuceLibraryCode/JuceHeader.h"
 
 using namespace boost::python;
 
 BOOST_PYTHON_MODULE(${moduleName})
 {
-% for c in exportFunctions:
-    export${c.name}();
+% for func in exportFunctions:
+    export_${func}();
 % endfor
 }
 

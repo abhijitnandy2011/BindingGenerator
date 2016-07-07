@@ -8,9 +8,13 @@ import sys
 import clang.cindex as cind
 import os
 
-BIND_TEMPLATE = "bindtemplate.mako"
-EXPORT_MODULE_TEMPLATE = "exportfile.mako"
-EXPORT_FILE_TEMPLATE = "exportmodule.mako"
+# Mako template file name constants
+EXPORT_MODULE_TEMPLATE = "exportmodule.mako"
+EXPORT_FILE_TEMPLATE = "exportfile.mako"
+CLANG_ENVIRON_VAR = 'CLANG_PATH'
+LIB_CLANG_DLL = "/libclang.dll"
+OUTPUT_DIR = "output"
+
 
 def get_annotations(node):
     """
@@ -19,16 +23,18 @@ def get_annotations(node):
     return [c.displayname for c in node.get_children()
             if c.kind == cind.CursorKind.ANNOTATE_ATTR]
 
+# Called for the functions in a class(see next class)
 class Function(object):
     """
     A class which holds the function name and any attributes 
     (hidden or not) associated with it
     """
     def __init__(self, cursor):
-        print("Not parsing class method:" + cursor.spelling)
+        #print("Parsing class method:" + cursor.spelling)
         self.name = cursor.spelling
         self.annotations = get_annotations(cursor)
 
+# Parse a class
 class Class(object):
     """
     A class which holds the class declaration and a list of all its
@@ -100,40 +106,43 @@ def printDiagnostics(tu):
                  " " + b.spelling + " " + b.option + "\n", 
                  (tu.diagnostics, ""))
 
-def writeToExportedModule(classes, makoTpl, bindFileName, outDirPath):
+def writeToExportedModule(moduleName, exporModuleTpl, functionsList):
     """
     Write the binding file for the module
     """
-    filePath = os.path.join(outDirPath, "bind_" + bindFileName)
+    filePath = os.path.join(OUTPUT_DIR, moduleName + ".cpp")
     out = file (filePath, "w")
-    out.write (makoTpl.render( classes = classes,
-                     module_name = sys.argv[3],
-                     include_file = os.path.basename(sys.argv[1])))
-    out.close()
+    out.write (exporModuleTpl.render(moduleName = moduleName, exportFunctions = functionsList))
+    out.close() 
 
-def writeToExportedFile(classes, makoTpl, bindFileName, outDirPath):
+def writeToExportedFile(classes, makoTpl, bindFileName, exportFunctionName, outDirPath):
     """
     Write the binding file based on the given template and the classes and functions
     found in the C file.
     """
-    filePath = os.path.join(outDirPath, "bind_" + bindFileName)
+    filePath = os.path.join(outDirPath, bindFileName)
     out = file (filePath, "w")
-    out.write (makoTpl.render( classes = classes,
-                     module_name = sys.argv[3],
-                     include_file = os.path.basename(sys.argv[1])))
+    out.write (makoTpl.render(classes = classes, functionName = exportFunctionName))
     out.close()
 
-def recursivelyBind(dirPath, makoTpl, index, outDirPath):
+def recursivelyBind(dirPath, makoTpl, index, outDirPath, boundFileNames):
     """ Recursively descend dir tree and bind """
     for fpath, subdirs, files in os.walk(dirPath):
-        for filename in files:
-            if filename.endswith('.h') :
-                tu = index.parse(path = os.path.join(fpath, filename), args=['-X', 'c++', '-std=c++11', 
+        for fileName in files:
+            if fileName.endswith('.h') :
+                tu = index.parse(path = os.path.join(fpath, fileName), args=['-X', 'c++', '-std=c++11', 
                                                    '-D__BINDING_GENERATOR__'])
                 classes = build_classes(tu.cursor)
-                writeToExportedFile(classes, makoTpl, filename, outDirPath)
+                cleanDirPath = dirPath.replace(".", "")
+                cleanDirPath = cleanDirPath.replace("/", "_")
+                cleanDirPath = cleanDirPath.replace("\\", "_")
+                bindFileName = "P" + cleanDirPath + "_" + fileName
+                bindFileName = bindFileName.replace(".h", ".cpp")
+                exportFunctionName = fileName.replace(".h", "")
+                writeToExportedFile(classes, makoTpl, bindFileName, exportFunctionName, outDirPath)
+                boundFileNames.append(fileName)
         for subdir in subdirs:
-            recursivelyBind(os.path.join(dirPath, subdir), makoTpl, index, outDirPath)
+            recursivelyBind(os.path.join(dirPath, subdir), makoTpl, index, outDirPath, boundFileNames)
 
 
 
@@ -144,7 +153,7 @@ def generateFile():
     file, and then generates the binding file based on the supplied template.
     It raises appropriate errors along the way if it encounters any.
     """
-    clang_path = os.environ.get('CLANG_PATH', '')
+    clang_path = os.environ.get(CLANG_ENVIRON_VAR, '')
     if not clang_path:
         raise Exception("CLANG_PATH environment variable not defined! Please define " \
                         "it to point to the libclang.dll or libclang.so file " \
@@ -163,18 +172,22 @@ def generateFile():
     print ("Generating python bindings for: " + sys.argv[1])
 
     # Create the clang index just once & resuse
-    cind.Config.set_library_file(clang_path + "/libclang.dll")
+    cind.Config.set_library_file(clang_path + LIB_CLANG_DLL)
     index = cind.Index.create()                 # create index here, we dont want to repeatedly do this
 
     # Now parse the dir contents recursively & bind
-    recursivelyBind(sys.argv[1], exporFileTpl, index, "output")
+    boundFileNames = []
+    recursivelyBind(sys.argv[1], exporFileTpl, index, OUTPUT_DIR, boundFileNames)
+
+    # Write the top level module file
+    writeToExportedModule(sys.argv[2], exporModuleTpl, boundFileNames)
     
     #printDiagnostics(tu)
     #print_code(classes)
 
     
 if __name__=="__main__":
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 2:
         print ("Usage - CPPBindingGenerator.py <cpp-filename> " \
                 "<binding-template> <module-name>")
         raise Exception ("Invalid arguments: " + reduce(lambda a, b: a + " " + b, sys.argv, ""))

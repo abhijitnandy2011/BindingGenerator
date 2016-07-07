@@ -32,7 +32,7 @@
 
     @see Button
 */
-class JUCE_API  ArrowButton  : public Button
+class   ArrowButton  : public Button
 {
 public:
     //==============================================================================

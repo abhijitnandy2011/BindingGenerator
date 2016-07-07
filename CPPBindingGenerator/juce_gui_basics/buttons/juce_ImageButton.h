@@ -35,7 +35,7 @@
 
     @see Button, ShapeButton, TextButton
 */
-class JUCE_API  ImageButton  : public Button
+class   ImageButton  : public Button
 {
 public:
     //==============================================================================
@@ -126,7 +126,7 @@ public:
 
     //==============================================================================
     /** This abstract base class is implemented by LookAndFeel classes. */
-    struct JUCE_API  LookAndFeelMethods
+    struct   LookAndFeelMethods
     {
         virtual ~LookAndFeelMethods() {}
 

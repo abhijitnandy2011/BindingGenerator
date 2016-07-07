@@ -33,7 +33,7 @@
 
     @see Button, DrawableButton
 */
-class JUCE_API  TextButton  : public Button
+class   TextButton  : public Button
 {
 public:
     //==============================================================================

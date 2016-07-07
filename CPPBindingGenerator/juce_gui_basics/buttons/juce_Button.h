@@ -36,7 +36,7 @@
 
     @see TextButton, DrawableButton, ToggleButton
 */
-class JUCE_API  Button  : public Component,
+class   Button  : public Component,
                           public SettableTooltipClient
 {
 protected:
@@ -159,7 +159,7 @@ public:
 
         @see Button::addListener, Button::removeListener
     */
-    class JUCE_API  Listener
+    class   Listener
     {
     public:
         /** Destructor. */
@@ -353,7 +353,7 @@ public:
     /** This abstract base class is implemented by LookAndFeel classes to provide
         button-drawing functionality.
     */
-    struct JUCE_API  LookAndFeelMethods
+    struct   LookAndFeelMethods
     {
         virtual ~LookAndFeelMethods() {}
 

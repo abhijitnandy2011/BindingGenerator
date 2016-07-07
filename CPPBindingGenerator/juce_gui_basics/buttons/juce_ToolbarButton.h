@@ -36,7 +36,7 @@
 
     @see Toolbar, ToolbarItemFactory, ToolbarItemComponent, Drawable, Button
 */
-class JUCE_API  ToolbarButton   : public ToolbarItemComponent
+class   ToolbarButton   : public ToolbarItemComponent
 {
 public:
     //==============================================================================

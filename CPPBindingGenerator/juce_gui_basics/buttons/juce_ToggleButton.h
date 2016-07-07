@@ -35,7 +35,7 @@
 
     @see Button, DrawableButton, TextButton
 */
-class JUCE_API  ToggleButton  : public Button
+class   ToggleButton  : public Button
 {
 public:
     //==============================================================================

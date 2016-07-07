@@ -33,7 +33,7 @@
 
     @see Button
 */
-class JUCE_API  HyperlinkButton  : public Button
+class   HyperlinkButton  : public Button
 {
 public:
     //==============================================================================
