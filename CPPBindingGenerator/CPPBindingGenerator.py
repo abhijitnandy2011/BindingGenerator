@@ -8,6 +8,10 @@ import sys
 import clang.cindex as cind
 import os
 
+BIND_TEMPLATE = "bindtemplate.mako"
+EXPORT_MODULE_TEMPLATE = "exportfile.mako"
+EXPORT_FILE_TEMPLATE = "exportmodule.mako"
+
 def get_annotations(node):
     """
     Get the annotations/attributes associated with the node
@@ -21,6 +25,7 @@ class Function(object):
     (hidden or not) associated with it
     """
     def __init__(self, cursor):
+        print("Not parsing class method:" + cursor.spelling)
         self.name = cursor.spelling
         self.annotations = get_annotations(cursor)
 
@@ -31,8 +36,10 @@ class Class(object):
     """
     def __init__(self, cursor):
         self.name = cursor.spelling
-        self.functions = [Function(c) for c in cursor.get_children() \
-                          if (c.kind == cind.CursorKind.CXX_METHOD)]
+        print("Parsing class " + self.name)
+
+        # Expose public functions only
+        self.functions = [Function(c) for c in cursor.get_children() if (c.kind == cind.CursorKind.CXX_METHOD and c.access_specifier == cind.AccessSpecifier.PUBLIC)]
         self.annotations = get_annotations(cursor)
 
 def build_classes(cursor):
@@ -41,8 +48,8 @@ def build_classes(cursor):
     """
     result = []
     for c in cursor.get_children():
-        if (c.kind == cind.CursorKind.CLASS_DECL
-            and c.location.file.name == sys.argv[1]):
+        if (c.kind == cind.CursorKind.CLASS_DECL):
+            """and c.location.file.name == sys.argv[1]):"""
             a_class = Class(c)
             result.append(a_class)
         elif c.kind == cind.CursorKind.NAMESPACE:
@@ -54,7 +61,7 @@ def build_classes(cursor):
 def node_children(node):
     #return only the children of those nodes that are defined in the current file
     # and not the ones in the include files.
-    return (c for c in node.get_children() if c.location.file.name == sys.argv[1])
+    return (c for c in node.get_children() if True)
 
 def print_functions(node):
     """
@@ -89,25 +96,46 @@ def printDiagnostics(tu):
     """
     Print all warnings/errors encountered while parsing/compiling the file
     """
-   # print reduce (lambda a, b: a + str(b.severity) + " " + str(b.location) + \
-        #          " " + b.spelling + " " + b.option + "\n", 
-        #          (tu.diagnostics, ""))
+    print reduce (lambda a, b: a + str(b.severity) + " " + str(b.location) + \
+                 " " + b.spelling + " " + b.option + "\n", 
+                 (tu.diagnostics, ""))
 
-def writeToFile(classes):
+def writeToExportedModule(classes, makoTpl, bindFileName, outDirPath):
+    """
+    Write the binding file for the module
+    """
+    filePath = os.path.join(outDirPath, "bind_" + bindFileName)
+    out = file (filePath, "w")
+    out.write (makoTpl.render( classes = classes,
+                     module_name = sys.argv[3],
+                     include_file = os.path.basename(sys.argv[1])))
+    out.close()
+
+def writeToExportedFile(classes, makoTpl, bindFileName, outDirPath):
     """
     Write the binding file based on the given template and the classes and functions
     found in the C file.
     """
-    from mako.template import Template
-
-    tpl = Template(filename = sys.argv[2])
-    pathComp = sys.argv[1].rsplit('.',1)
-    filePath = pathComp[0] + '_bind.' + pathComp[1]
+    filePath = os.path.join(outDirPath, "bind_" + bindFileName)
     out = file (filePath, "w")
-    out.write (tpl.render( classes = classes,
+    out.write (makoTpl.render( classes = classes,
                      module_name = sys.argv[3],
                      include_file = os.path.basename(sys.argv[1])))
     out.close()
+
+def recursivelyBind(dirPath, makoTpl, index, outDirPath):
+    """ Recursively descend dir tree and bind """
+    for fpath, subdirs, files in os.walk(dirPath):
+        for filename in files:
+            if filename.endswith('.h') :
+                tu = index.parse(path = os.path.join(fpath, filename), args=['-X', 'c++', '-std=c++11', 
+                                                   '-D__BINDING_GENERATOR__'])
+                classes = build_classes(tu.cursor)
+                writeToExportedFile(classes, makoTpl, filename, outDirPath)
+        for subdir in subdirs:
+            recursivelyBind(os.path.join(dirPath, subdir), makoTpl, index, outDirPath)
+
+
 
 def generateFile():
     """
@@ -116,26 +144,34 @@ def generateFile():
     file, and then generates the binding file based on the supplied template.
     It raises appropriate errors along the way if it encounters any.
     """
-    if not os.path.exists(sys.argv[1]):
-        raise Exception("Provided file or path doesnot exist: " + sys.argv[1])
-
     clang_path = os.environ.get('CLANG_PATH', '')
-
     if not clang_path:
         raise Exception("CLANG_PATH environment variable not defined! Please define " \
                         "it to point to the libclang.dll or libclang.so file " \
                         "installed on the system")
 
+    # Check if passed dir is valid
+    if not os.path.exists(sys.argv[1]):
+        raise Exception("Provided file or path doesnot exist: " + sys.argv[1])
+    
+    # Read mako string templates - used for simple string substitution
+    from mako.template import Template
+    # Do this once here, we do not want to repeatedly do this
+    exporModuleTpl = Template(filename = EXPORT_MODULE_TEMPLATE)
+    exporFileTpl   = Template(filename = EXPORT_FILE_TEMPLATE)
+
     print ("Generating python bindings for: " + sys.argv[1])
+
+    # Create the clang index just once & resuse
     cind.Config.set_library_file(clang_path + "/libclang.dll")
-    index = cind.Index.create()
-    os.chdir(os.path.dirname(sys.argv[1])) #change the current directory to the include directory to avoid compile errors.
-    print ("File path after changing the OS directory: " + sys.argv[1])
-    tu = index.parse(path = sys.argv[1], args=['-X', 'c++', '-std=c++11', 
-                                               '-D__BINDING_GENERATOR__'])
-    classes = build_classes(tu.cursor)
+    index = cind.Index.create()                 # create index here, we dont want to repeatedly do this
+
+    # Now parse the dir contents recursively & bind
+    recursivelyBind(sys.argv[1], exporFileTpl, index, "output")
+    
     #printDiagnostics(tu)
-    writeToFile(classes)
+    #print_code(classes)
+
     
 if __name__=="__main__":
     if len(sys.argv) < 4:

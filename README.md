@@ -14,3 +14,6 @@ Currently the generator produces Boost Python bindings. To run the generator:
 9. Enjoy!
 10. Lua bindings support using luabind will be added soon. 
 
+##Note:
+1. Remove macros infront of class names first
+
