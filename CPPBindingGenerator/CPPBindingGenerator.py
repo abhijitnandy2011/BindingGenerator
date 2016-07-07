@@ -32,6 +32,7 @@ class Function(object):
     def __init__(self, cursor):
         #print("Parsing class method:" + cursor.spelling)
         self.name = cursor.spelling
+        self.isVirtual = cursor.is_virtual_method()
         self.annotations = get_annotations(cursor)
 
 # Parse a class
