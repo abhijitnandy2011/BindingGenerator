@@ -16,4 +16,4 @@ Currently the generator produces Boost Python bindings. To run the generator:
 
 ##Note:
 1. Remove macros infront of class names first
-
+2. Remove macros infront of function names too - this parser parses one file at a time, so unless the macro is defined in the same file, it has no way of knowing that its a macro and assumes it to be the function name or class name.
