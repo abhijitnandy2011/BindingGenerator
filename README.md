@@ -1,7 +1,7 @@
 # BindingGenerator
 Generate Python or Lua bindings.
 
-Currently the generator produces Boost Python bindings. To run the generator:
+Currently the generator produces Boost Python bindings. It will soon by able to produce pybind bindings as well. To run the generator:
 
 1. Install CLANG 32 bit.
 2. Create an environment variable called CLANG_PATH and set it to the LLVM/bin folder in which the libclang.dll file is present.
