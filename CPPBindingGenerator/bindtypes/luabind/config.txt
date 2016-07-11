@@ -1,1 +1,2 @@
 PREFIX = L
+CLANG_PATH=C:\Program Files (x86)\LLVM\bin

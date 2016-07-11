@@ -105,26 +105,26 @@ def printDiagnostics(tu):
                  " " + b.spelling + " " + b.option + "\n", 
                  (tu.diagnostics, ""))
 
-def writeToExportedModule(moduleName, exporModuleTpl, functionsList, outputDir):
+def writeToExportedModule(moduleName, prefix, exporModuleTpl, functionsList, outputDir):
     """
     Write the binding file for the module
     """
-    filePath = os.path.join(outputDir, moduleName + ".cpp")
+    filePath = os.path.join(outputDir, prefix + moduleName + ".cpp")
     out = file (filePath, "w")
     out.write (exporModuleTpl.render(moduleName = moduleName, exportFunctions = functionsList))
     out.close() 
 
-def writeToExportedFile(classes, makoTpl, bindFileName, exportFunctionName, outDirPath):
+def writeToExportedFile(moduleName, classes, makoTpl, bindFileName, exportFunctionName, outDirPath):
     """
     Write the binding file based on the given template and the classes and functions
     found in the C file.
     """
     filePath = os.path.join(outDirPath, bindFileName)
     out = file (filePath, "w")
-    out.write (makoTpl.render(classes = classes, functionName = exportFunctionName))
+    out.write (makoTpl.render(classes = classes, functionName = exportFunctionName, moduleName = moduleName))
     out.close()
 
-def recursivelyBind(dirPath, makoTpl, index, outDirPath, boundFileNames, prefix):
+def recursivelyBind(moduleName, dirPath, makoTpl, index, outDirPath, boundFileNames, prefix):
     """ Recursively descend dir tree and bind """
     for fpath, subdirs, files in os.walk(dirPath):
         for fileName in files:
@@ -132,16 +132,17 @@ def recursivelyBind(dirPath, makoTpl, index, outDirPath, boundFileNames, prefix)
                 tu = index.parse(path = os.path.join(fpath, fileName), args=['-X', 'c++', '-std=c++11', 
                                                    '-D__BINDING_GENERATOR__'])
                 classes = build_classes(tu.cursor)
-                cleanDirPath = dirPath.replace(".", "")
-                cleanDirPath = cleanDirPath.replace("/", "_")
+                cleanDirPath = dirPath.replace(".", "")   
+                cleanDirPath = cleanDirPath.replace("/", "_")  # strings are immutable in Python.so assign result back
                 cleanDirPath = cleanDirPath.replace("\\", "_")
+                cleanDirPath = cleanDirPath.lstrip('_')
                 bindFileName = prefix + cleanDirPath + "_" + fileName
                 bindFileName = bindFileName.replace(".h", ".cpp")
                 exportFunctionName = fileName.replace(".h", "")
-                writeToExportedFile(classes, makoTpl, bindFileName, exportFunctionName, outDirPath)
-                boundFileNames.append(fileName)
+                writeToExportedFile(moduleName, classes, makoTpl, bindFileName, exportFunctionName, outDirPath)
+                boundFileNames.append(fileName.replace(".h", ""))
         for subdir in subdirs:
-            recursivelyBind(os.path.join(dirPath, subdir), makoTpl, index, outDirPath, boundFileNames, prefix)
+            recursivelyBind(moduleName, os.path.join(dirPath, subdir), makoTpl, index, outDirPath, boundFileNames, prefix)
 
 def readConfigFile(configFile):
     """Reads a config file with no section headers and returns a dictionary of key-value pairs"""
@@ -222,10 +223,10 @@ def generateFile():
 
     # Now parse the dir contents recursively & bind
     boundFileNames = []
-    recursivelyBind(sys.argv[1], exporFileTpl, index, outputDir, boundFileNames, prefix)
+    recursivelyBind(sys.argv[2], sys.argv[1], exporFileTpl, index, outputDir, boundFileNames, prefix)
 
     # Write the top level module file
-    writeToExportedModule(prefix + sys.argv[2], exporModuleTpl, boundFileNames, outputDir)
+    writeToExportedModule(sys.argv[2], prefix, exporModuleTpl, boundFileNames, outputDir)
     
     #printDiagnostics(tu)
     #print_code(classes)
