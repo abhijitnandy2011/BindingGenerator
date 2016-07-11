@@ -110,7 +110,7 @@ def writeToExportedModule(moduleName, prefix, exporModuleTpl, functionsList, out
     Write the binding file for the module
     """
     filePath = os.path.join(outputDir, prefix + moduleName + ".cpp")
-    out = file (filePath, "w")
+    out = file (filePath, "wb")
     out.write (exporModuleTpl.render(moduleName = moduleName, exportFunctions = functionsList))
     out.close() 
 
@@ -120,7 +120,7 @@ def writeToExportedFile(moduleName, classes, makoTpl, bindFileName, exportFuncti
     found in the C file.
     """
     filePath = os.path.join(outDirPath, bindFileName)
-    out = file (filePath, "w")
+    out = file (filePath, "wb")
     out.write (makoTpl.render(classes = classes, functionName = exportFunctionName, moduleName = moduleName))
     out.close()
 
