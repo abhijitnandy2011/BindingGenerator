@@ -1,1 +1,2 @@
-PREFIX = PB
+PREFIX=BP
+CLANG_PATH=C:\Program Files (x86)\LLVM\bin

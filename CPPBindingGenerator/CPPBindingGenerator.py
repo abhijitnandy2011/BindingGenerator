@@ -10,7 +10,6 @@ import os
 # Clang default constants & output dir
 BINDTYPES_DIR = "bindtypes"
 BINDTYPE_CONFIG_FILE = "config.txt"
-CLANG_ENVIRON_VAR = 'CLANG_PATH'
 BIND_PREFIX = "B"
 LIB_CLANG_DLL = "/libclang.dll"
 OUTPUT_DIR = "output"
@@ -180,20 +179,26 @@ def generateFile():
     configDict = readConfigFile(os.path.join(chosenBindingPath, BINDTYPE_CONFIG_FILE))
 
     # Check if CLANG is present at the passed path
-    clangEnvironVar = CLANG_ENVIRON_VAR
-    if (configDict.has_key("CLANG_ENVIRON_VAR")):
-        clangEnvironVar = configDict["CLANG_ENVIRON_VAR"]
-    clangPath = os.environ.get(clangEnvironVar, '')
-    if not clangPath:
-        raise Exception(clangEnvironVar + " environment variable not defined! Please define " \
-                        "it to point to the libclang.dll or libclang.so file " \
-                        "installed on the system")
+    clangPath = "./clang"
+    if (configDict.has_key("CLANG_PATH")):
+        clangPath = configDict["CLANG_PATH"]
+    if not os.path.exists(clangPath):
+        raise Exception("The path to the CLANG library(libclang.dll or libclang.so file) was not found at " + clangPath +
+                        ". The config setting CLANG_PATH needs to be preset in the config file of the required binding type." \
+                         " It needs to be set to the directory where the CLANG library is present")
+    print("Found CLANG library at " + clangPath)
     
     # Read mako string templates - used for simple string substitution
     from mako.template import Template
     # Do this once here, we do not want to repeatedly do this
     exportModuleTplPath = os.path.join(chosenBindingPath, "exportmodule.mako")
+    if not os.path.exists(exportModuleTplPath):
+        raise Exception("No module export mako string template found at: " + exportModuleTplPath)
+
     exportFileTplPath   = os.path.join(chosenBindingPath, "exportfile.mako")
+    if not os.path.exists(exportModuleTplPath):
+        raise Exception("No cpp file export mako string template found at: " + exportFileTplPath)
+
     exporModuleTpl = Template(filename = exportModuleTplPath)
     exporFileTpl   = Template(filename = exportFileTplPath)
 
@@ -220,7 +225,7 @@ def generateFile():
     recursivelyBind(sys.argv[1], exporFileTpl, index, outputDir, boundFileNames, prefix)
 
     # Write the top level module file
-    writeToExportedModule(prefix + "_" + sys.argv[2], exporModuleTpl, boundFileNames, outputDir)
+    writeToExportedModule(prefix + sys.argv[2], exporModuleTpl, boundFileNames, outputDir)
     
     #printDiagnostics(tu)
     #print_code(classes)
