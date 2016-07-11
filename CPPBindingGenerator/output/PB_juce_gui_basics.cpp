@@ -4,7 +4,7 @@
 
 using namespace boost::python;
 
-BOOST_PYTHON_MODULE(juce_gui_basics)
+BOOST_PYTHON_MODULE(PB_juce_gui_basics)
 {
     export_juce_ArrowButton.h();
     export_juce_Button.h();

@@ -1,20 +1,19 @@
 ﻿"""
-This module parses a given .cpp/.h/.c file and generates appropriate
-python/lua binding file as per the given template.
-It uses lib-clang python bindings to parse the file and process the 
-AST generated.
+This module parses a given directory containing header files and generates appropriate
+binding file as per the given template and chosen binding type. 
+It uses lib-clang python bindings to parse the file and processes the generated AST.
 """
 import sys
 import clang.cindex as cind
 import os
 
-# Mako template file name constants
-EXPORT_MODULE_TEMPLATE = "exportmodule.mako"
-EXPORT_FILE_TEMPLATE = "exportfile.mako"
+# Clang default constants & output dir
+BINDTYPES_DIR = "bindtypes"
+BINDTYPE_CONFIG_FILE = "config.txt"
 CLANG_ENVIRON_VAR = 'CLANG_PATH'
+BIND_PREFIX = "B"
 LIB_CLANG_DLL = "/libclang.dll"
 OUTPUT_DIR = "output"
-
 
 def get_annotations(node):
     """
@@ -107,11 +106,11 @@ def printDiagnostics(tu):
                  " " + b.spelling + " " + b.option + "\n", 
                  (tu.diagnostics, ""))
 
-def writeToExportedModule(moduleName, exporModuleTpl, functionsList):
+def writeToExportedModule(moduleName, exporModuleTpl, functionsList, outputDir):
     """
     Write the binding file for the module
     """
-    filePath = os.path.join(OUTPUT_DIR, moduleName + ".cpp")
+    filePath = os.path.join(outputDir, moduleName + ".cpp")
     out = file (filePath, "w")
     out.write (exporModuleTpl.render(moduleName = moduleName, exportFunctions = functionsList))
     out.close() 
@@ -126,7 +125,7 @@ def writeToExportedFile(classes, makoTpl, bindFileName, exportFunctionName, outD
     out.write (makoTpl.render(classes = classes, functionName = exportFunctionName))
     out.close()
 
-def recursivelyBind(dirPath, makoTpl, index, outDirPath, boundFileNames):
+def recursivelyBind(dirPath, makoTpl, index, outDirPath, boundFileNames, prefix):
     """ Recursively descend dir tree and bind """
     for fpath, subdirs, files in os.walk(dirPath):
         for fileName in files:
@@ -137,60 +136,98 @@ def recursivelyBind(dirPath, makoTpl, index, outDirPath, boundFileNames):
                 cleanDirPath = dirPath.replace(".", "")
                 cleanDirPath = cleanDirPath.replace("/", "_")
                 cleanDirPath = cleanDirPath.replace("\\", "_")
-                bindFileName = "P" + cleanDirPath + "_" + fileName
+                bindFileName = prefix + cleanDirPath + "_" + fileName
                 bindFileName = bindFileName.replace(".h", ".cpp")
                 exportFunctionName = fileName.replace(".h", "")
                 writeToExportedFile(classes, makoTpl, bindFileName, exportFunctionName, outDirPath)
                 boundFileNames.append(fileName)
         for subdir in subdirs:
-            recursivelyBind(os.path.join(dirPath, subdir), makoTpl, index, outDirPath, boundFileNames)
+            recursivelyBind(os.path.join(dirPath, subdir), makoTpl, index, outDirPath, boundFileNames, prefix)
 
+def readConfigFile(configFile):
+    """Reads a config file with no section headers and returns a dictionary of key-value pairs"""
+    separator = "="
+    keys = {}
+    # I named your file conf and stored it 
+    # in the same directory as the script
+    with open(configFile) as f:
+        for line in f:
+            if separator in line:
+                # Find the name and value by splitting the string
+                name, value = line.split(separator, 1)
+                # Assign key value pair to dict
+                # strip() removes white space from the ends of strings
+                keys[name.strip()] = value.strip()
+    return keys
 
 
 def generateFile():
     """
     This function initializes the CLANG library (based on the environment variable
-    CLANG_PATH defined in the system environment variables), parses the given input
-    file, and then generates the binding file based on the supplied template.
-    It raises appropriate errors along the way if it encounters any.
+    CLANG_PATH defined in the system environment variables or he one passed in config.txt), 
+    It then parses the given input directory, and generates the bindings based on the 
+    supplied template. It raises appropriate errors along the way if it encounters any.
     """
-    clang_path = os.environ.get(CLANG_ENVIRON_VAR, '')
-    if not clang_path:
-        raise Exception("CLANG_PATH environment variable not defined! Please define " \
-                        "it to point to the libclang.dll or libclang.so file " \
-                        "installed on the system")
 
     # Check if passed dir is valid
     if not os.path.exists(sys.argv[1]):
-        raise Exception("Provided file or path doesnot exist: " + sys.argv[1])
+        raise Exception("The directory to pick C++ headers to bind does not exist at: " + sys.argv[1])
+
+    # Read configuration for chosen binding
+    chosenBindingPath = os.path.join(BINDTYPES_DIR, sys.argv[3])
+    if not os.path.exists(chosenBindingPath):
+        raise Exception("There is no configuration file for the chosen binding type at: " + chosenBindingPath)
+    configDict = readConfigFile(os.path.join(chosenBindingPath, BINDTYPE_CONFIG_FILE))
+
+    # Check if CLANG is present at the passed path
+    clangEnvironVar = CLANG_ENVIRON_VAR
+    if (configDict.has_key("CLANG_ENVIRON_VAR")):
+        clangEnvironVar = configDict["CLANG_ENVIRON_VAR"]
+    clangPath = os.environ.get(clangEnvironVar, '')
+    if not clangPath:
+        raise Exception(clangEnvironVar + " environment variable not defined! Please define " \
+                        "it to point to the libclang.dll or libclang.so file " \
+                        "installed on the system")
     
     # Read mako string templates - used for simple string substitution
     from mako.template import Template
     # Do this once here, we do not want to repeatedly do this
-    exporModuleTpl = Template(filename = EXPORT_MODULE_TEMPLATE)
-    exporFileTpl   = Template(filename = EXPORT_FILE_TEMPLATE)
+    exportModuleTplPath = os.path.join(chosenBindingPath, "exportmodule.mako")
+    exportFileTplPath   = os.path.join(chosenBindingPath, "exportfile.mako")
+    exporModuleTpl = Template(filename = exportModuleTplPath)
+    exporFileTpl   = Template(filename = exportFileTplPath)
 
-    print ("Generating python bindings for: " + sys.argv[1])
+    print ("Generating " + sys.argv[3] + " bindings for files in " + sys.argv[1] + " and module name " + sys.argv[2])
 
-    # Create the clang index just once & resuse
-    cind.Config.set_library_file(clang_path + LIB_CLANG_DLL)
+    # Create the clang index just once & re-use
+    libClangDLL = LIB_CLANG_DLL
+    if (configDict.has_key("LIB_CLANG_DLL")):
+        libClangDLL = configDict["LIB_CLANG_DLL"]
+    cind.Config.set_library_file(clangPath + libClangDLL)
     index = cind.Index.create()                 # create index here, we dont want to repeatedly do this
+
+    # Read other config params that may have been passed & required before binding
+    prefix = BIND_PREFIX
+    if (configDict.has_key("PREFIX")):
+        prefix = configDict["PREFIX"]
+    
+    outputDir = OUTPUT_DIR
+    if (configDict.has_key("OUTPUT_DIR")):
+        outputDir = configDict["OUTPUT_DIR"]
 
     # Now parse the dir contents recursively & bind
     boundFileNames = []
-    recursivelyBind(sys.argv[1], exporFileTpl, index, OUTPUT_DIR, boundFileNames)
+    recursivelyBind(sys.argv[1], exporFileTpl, index, outputDir, boundFileNames, prefix)
 
     # Write the top level module file
-    writeToExportedModule(sys.argv[2], exporModuleTpl, boundFileNames)
+    writeToExportedModule(prefix + "_" + sys.argv[2], exporModuleTpl, boundFileNames, outputDir)
     
     #printDiagnostics(tu)
     #print_code(classes)
-
     
 if __name__=="__main__":
     if len(sys.argv) < 2:
-        print ("Usage - CPPBindingGenerator.py <cpp-filename> " \
-                "<binding-template> <module-name>")
+        print ("Usage - CPPBindingGenerator.py <dirpath-to-bind> <module-name> <binding-type>")
         raise Exception ("Invalid arguments: " + reduce(lambda a, b: a + " " + b, sys.argv, ""))
     else:
         generateFile()
